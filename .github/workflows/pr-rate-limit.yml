@@ -56,7 +56,7 @@ jobs:
           script: |
             const SUBMISSION_LIMIT = 5;
             const OPEN_LIMIT = 5;
-            const WINDOW_MS = 60 * 60 * 1000; // One-hour sandbox test window.
+            const WINDOW_MS = 5 * 60 * 1000; // Five-minute sandbox test window.
             const EXEMPT_LABEL = 'pr-rate-limit-exempt';
             const MARKER = '<!-- new-contributor-pr-rate-limit:v2 -->';
             const { owner, repo } = context.repo;
@@ -137,13 +137,13 @@ jobs:
             if (!submissionExceeded && openCount <= OPEN_LIMIT) return;
             const reasons = [];
             if (submissionExceeded) reasons.push('you submitted ' + preceding.length +
-              ' PRs in the 1-hour window ending with this submission (limit: ' + SUBMISSION_LIMIT + ')');
+              ' PRs in the 5-minute window ending with this submission (limit: ' + SUBMISSION_LIMIT + ')');
             if (openCount > OPEN_LIMIT) reasons.push('you currently have ' + openCount +
               ' open PRs, including this one (limit: ' + OPEN_LIMIT + ')');
             const body = [
               'Closing this PR because ' + reasons.join('; ') + '.',
               'Contributors with no merged PRs in this repository may submit up to ' + SUBMISSION_LIMIT +
-                ' PRs per rolling hour and keep up to ' + OPEN_LIMIT + ' PRs open, including drafts. ' +
+                ' PRs per rolling five minutes and keep up to ' + OPEN_LIMIT + ' PRs open, including drafts. ' +
                 'Closed PRs still count toward the submission limit.',
               (submissionExceeded ? 'The submission cooldown ends at ' + new Date(created + WINDOW_MS).toISOString() + '. ' : '') +
                 'You may ask a maintainer to reopen this PR when fewer than ' + OPEN_LIMIT + ' of your other PRs are open' +

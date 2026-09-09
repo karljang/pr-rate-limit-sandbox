@@ -22,9 +22,10 @@ const execute = new (Object.getPrototypeOf(async function () {}).constructor)(
   'github', 'context', 'core', 'process', 'Date', script,
 );
 const now = Date.parse('2026-09-09T12:00:00Z');
-const hour = 3600000;
+const minute = 60000;
+const windowMs = 5 * minute;
 function pr(number, overrides = {}) {
-  return { number, created_at: new Date(now - hour + number * 1000).toISOString(),
+  return { number, created_at: new Date(now - minute + number * 1000).toISOString(),
     state: 'open', labels: [], user: { id: 42, login: 'new-user', type: 'User' },
     pull_request: {}, ...overrides };
 }
@@ -83,7 +84,7 @@ test('first five pass; sixth receives explanation before closure', async () => {
   assert.deepEqual(writes.map((w) => w.kind), ['comment', 'close']);
   assert.match(writes[0].body, /submitted 6 PRs/);
   assert.match(writes[0].body, /no merged PRs/);
-  assert.match(writes[0].body, /2026-09-09T12:00:06.000Z/);
+  assert.match(writes[0].body, /2026-09-09T12:04:06.000Z/);
   assert.equal(writes[1].state, 'closed');
 });
 test('counts drafts and closed unmerged PRs, but not ordinary issues or another author', async () => {
@@ -93,7 +94,7 @@ test('counts drafts and closed unmerged PRs, but not ordinary issues or another 
 });
 test('submission window excludes its lower boundary and later PRs', async () => {
   const current = pr(6);
-  const boundary = new Date(Date.parse(current.created_at) - hour).toISOString();
+  const boundary = new Date(Date.parse(current.created_at) - windowMs).toISOString();
   const history = [pr(1, { created_at: boundary }), ...[2, 3, 4, 5].map((n) => pr(n)), pr(7)]
     .map((item) => ({ ...item, state: 'closed' }));
   assert.deepEqual((await run({ current, history })).writes, []);
@@ -130,7 +131,7 @@ test('dry run, closed PRs, and exemptions added during evaluation make no writes
   assert.deepEqual((await run({ recheck: pr(6, { state: 'closed' }) })).writes, []);
 });
 test('reopening after cooldown requires capacity; submission cooldown still applies before it', async () => {
-  assert.deepEqual((await run({ current: pr(6, { created_at: new Date(now - hour).toISOString() }), history: [] })).writes, []);
+  assert.deepEqual((await run({ current: pr(6, { created_at: new Date(now - windowMs).toISOString() }), history: [] })).writes, []);
   assert.equal((await run()).writes.length, 2);
 });
 test('reruns reuse only bot-authored comments and retry closure', async () => {
@@ -181,7 +182,7 @@ test('manual recovery preserves dry run, exemptions, cooldown and comment reconc
   const payload = { inputs: { pr_number: '6' } };
   assert.deepEqual((await run({ payload, env: { DRY_RUN: 'true' } })).writes, []);
   assert.deepEqual((await run({ payload, permission: 'write' })).writes, []);
-  assert.deepEqual((await run({ payload, current: pr(6, { created_at: new Date(now - hour).toISOString() }), history: [] })).writes, []);
+  assert.deepEqual((await run({ payload, current: pr(6, { created_at: new Date(now - windowMs).toISOString() }), history: [] })).writes, []);
   const comments = [{ user: { login: 'github-actions[bot]' }, body: '<!-- new-contributor-pr-rate-limit:v2 -->' }];
   assert.deepEqual((await run({ payload, comments })).writes.map((w) => w.kind), ['close']);
 });
@@ -194,7 +195,7 @@ test('privileged action is pinned and manual runs are restricted to the default 
 });
 
 test('open-PR limit prevents reopening a backlog after the submission cooldown', async () => {
-  const current = pr(6, { created_at: new Date(now - 2 * hour).toISOString() });
+  const current = pr(6, { created_at: new Date(now - 2 * windowMs).toISOString() });
   const history = Array.from({ length: 5 }, (_, i) => pr(i + 1, { draft: true }));
   const { writes } = await run({ current, history });
   assert.deepEqual(writes.map((w) => w.kind), ['comment', 'close']);
@@ -205,19 +206,19 @@ test('open-PR limit prevents reopening a backlog after the submission cooldown',
 });
 
 test('old reopened PR is allowed when capacity becomes available during evaluation', async () => {
-  const current = pr(6, { created_at: new Date(now - 2 * hour).toISOString() });
+  const current = pr(6, { created_at: new Date(now - 2 * windowMs).toISOString() });
   assert.deepEqual((await run({ current, openHistory: [pr(1), pr(2)] })).writes, []);
 });
 
 test('open-PR limit applies even when recent submissions are below five', async () => {
-  const history = Array.from({ length: 5 }, (_, i) => pr(i + 1, { created_at: new Date(now - 2 * hour).toISOString() }));
+  const history = Array.from({ length: 5 }, (_, i) => pr(i + 1, { created_at: new Date(now - 2 * windowMs).toISOString() }));
   const { writes } = await run({ history });
   assert.match(writes[0].body, /currently have 6 open PRs/);
   assert.doesNotMatch(writes[0].body, /cooldown ends/);
 });
 
 test('a reopened backlog of old PRs stays subject to the open cap during manual recovery', async () => {
-  const history = Array.from({ length: 100 }, (_, i) => pr(i + 1, { created_at: new Date(now - 2 * hour).toISOString() }));
+  const history = Array.from({ length: 100 }, (_, i) => pr(i + 1, { created_at: new Date(now - 2 * windowMs).toISOString() }));
   const current = history[99];
   const { writes } = await run({ current, pages: [history, []], openHistory: history, payload: { inputs: { pr_number: '100' } } });
   assert.match(writes[0].body, /currently have 100 open PRs/);
